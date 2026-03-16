@@ -8,11 +8,16 @@ APBR – Workshops in Creative Coding 2
 
 # Feminist Tarot Gesture Prototype
 
+**Name:** Feminist Tarot Gesture Prototype  
 **Author:** Siyu Xu  
 **Date:** 22 Jan 2026  
 **Tech:** Python, Pygame, OpenCV, MediaPipe  
 **Input:** Webcam hand gestures  
 **Output:** Tarot interaction, hand skeleton overlay, bilingual keywords
+
+---
+
+## Optional blurb
 
 A webcam-based interactive tarot prototype controlled by hand gestures.  
 The user shuffles a 22-card Major Arcana deck, picks a card, and flips it using real-time hand landmark tracking.  
@@ -83,7 +88,7 @@ These files should also remain in the same folder as the main script:
 
 ---
 
-## How to run
+## Instructions (operation manual)
 
 Open Terminal from the **repository root** and run:
 
@@ -103,6 +108,10 @@ cd "Coding_Feminist Tarot Gesture Prototype"
 source ../.venv/bin/activate
 python tarot_gesture.py
 ```
+
+**Important:**
+This project is currently most reliable when launched from **Terminal** with the virtual environment activated.
+In VS Code, the **Run** button may use a different Python interpreter and cause missing-package errors.
 
 ---
 

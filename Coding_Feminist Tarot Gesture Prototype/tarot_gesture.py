@@ -13,7 +13,10 @@
 # - Put this .py file next to these folders:
 #   ./cards/  (must include back.png and 22 front PNGs named with 0..21 prefix)
 #   ./fonts/  (must include NotoSerif-VariableFont_wdth,wght.ttf)
-# - Run: python tarot_gesture.py
+# - Run:
+#   cd "Coding_Feminist Tarot Gesture Prototype"
+#   source ../.venv/bin/activate
+#   python tarot_gesture.py
 # - Gestures:
 #   * Fist = reset stack
 #   * Open palm = shuffle (and return to shuffle from a revealed card)
@@ -22,69 +25,72 @@
 # - ESC / Q quits.
 #
 # Acknowledgements / use of AI tools:
-# I acknowledge the use of [1] ChatGPT (https://chat.openai.com/) to [2] generate,
+# I acknowledge the use of ChatGPT (https://chat.openai.com/) to generate,
 # debug, and refine Python code for webcam capture, MediaPipe hand landmark tracking,
-# gesture logic (debounce + swing detection), and Pygame rendering in the drafting of
-# this assessment. In January 2026 I entered prompts (paraphrased) such as:
-# [3] “Help me build a Python + Pygame interactive tarot prototype controlled by a webcam.
-# Use MediaPipe Hands to detect fist/open/one-finger gestures and a swing gesture to flip
-# a card. Keep the interface smooth (reduced processing frequency), show a small camera
-# preview with a skeleton overlay, and display English/Chinese poetic keywords only after
-# a successful flip.” The generated code was then edited, extended, parameter-tuned and
-# commented by me, and portions of this AI-assisted code are included in the final sketch.
+# gesture logic (debounce + swing detection), and Pygame rendering in the drafting
+# of this assessment.
+#
+# In January 2026 I entered prompts (paraphrased) such as:
+# “Help me build a Python + Pygame interactive tarot prototype controlled by a webcam.
+# Use MediaPipe Hands to detect fist, open-palm, one-finger gestures, and a swing
+# gesture to flip a card. Keep the interface smooth by reducing processing frequency,
+# show a small camera preview with a skeleton overlay, and display English / Chinese
+# poetic keywords only after a successful flip.”
+#
+# The generated code was then edited, extended, parameter-tuned, and commented by me,
+# and portions of this AI-assisted code are included in the final sketch.
 
+import math
 import os
+import random
 import re
 import time
-import math
-import random
 
 import cv2
+import mediapipe as mp
 import numpy as np
 import pygame
-
-import mediapipe as mp
 
 
 # ---------------------------- CONFIG ----------------------------
 WIN_W, WIN_H = 1920, 1080
-FPS = 30  # 你机器卡的话 30 比 60 稳很多
+FPS = 30  # 30 is more stable than 60 on slower machines
 
 CAM_W, CAM_H = 320, 240
 CAM_INDEX = 0
 
-# 手势检测频率（降低会更流畅）
+# Hand detection frequency
 MP_FPS = 15
 
-# 去抖（手势稳定时间）
+# Debounce: stable gesture duration required before triggering
 DEBOUNCE_SEC = 0.35
 
-# SWING：窗口内 X 轨迹的“范围”超过阈值就算甩动（比首尾dx更适合来回晃）
+# Swing detection:
+# If the x-range of the fingertip path within the window exceeds the threshold,
+# it counts as a swing gesture. This is more suitable than only using start-end dx.
 SWING_WINDOW_SEC = 0.28
 SWING_THRESHOLD_PX = 45
 SWING_COOLDOWN_SEC = 0.45
 
-# 动画时长
+# Animation durations
 PICK_DURATION = 1.0
 FLIP_DURATION = 0.8
 RESHUFFLE_DURATION = 1.0
 
-# 牌尺寸（保持你这版的设定，不动）
-CARD_H_STACK = int(WIN_H * 0.30)   # 中心牌堆显示大小（背面）
-CARD_H_SMALL = int(WIN_H * 0.20)   # 洗牌/背景小牌
-CARD_H_BIG   = int(WIN_H * 0.40)   # 抽中放大（背面/正面）
+# Card display sizes
+CARD_H_STACK = int(WIN_H * 0.30)  # central stack display size (back)
+CARD_H_SMALL = int(WIN_H * 0.20)  # shuffled / background small cards
+CARD_H_BIG = int(WIN_H * 0.40)  # selected enlarged card (back / front)
 
 BG_COLOR = (10, 8, 18)
-
 CENTER = (WIN_W // 2, WIN_H // 2 - 20)
 
-CARDS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cards")
-
-# 字体：英文用你下载的 NotoSerif；中文强制加载 macOS 系统字体文件（避免方框）
-FONTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CARDS_DIR = os.path.join(BASE_DIR, "cards")
+FONTS_DIR = os.path.join(BASE_DIR, "fonts")
 FONT_EN_FILE = "NotoSerif-VariableFont_wdth,wght.ttf"
 
-# macOS 常见中文字体文件候选（优先 PingFang）
+# Common macOS Chinese font file candidates, with PingFang preferred
 MAC_CN_FONT_CANDIDATES = [
     "/System/Library/Fonts/PingFang.ttc",
     "/System/Library/Fonts/Supplemental/PingFang.ttc",
@@ -96,7 +102,7 @@ MAC_CN_FONT_CANDIDATES = [
 # ---------------------------------------------------------------
 
 
-# 0-21 大阿尔卡纳标准顺序
+# Standard Major Arcana order (0-21)
 ARCANA = [
     "The Fool",
     "The Magician",
@@ -122,7 +128,7 @@ ARCANA = [
     "The World",
 ]
 
-# 你给的牌意（英文 keyword + 中文映射）
+# English keyword + Chinese translation for each card
 TAROT_TEXT = {
     "The Fool": ("birth", "降生"),
     "The Magician": ("agency", "能动性"),
@@ -155,7 +161,7 @@ def lerp(a, b, t):
 
 
 def lerp2(p, q, t):
-    return (lerp(p[0], q[0], t), lerp(p[1], q[1], t))
+    return lerp(p[0], q[0], t), lerp(p[1], q[1], t)
 
 
 def ease_in_out(t):
@@ -173,7 +179,7 @@ def load_png_scaled(path, target_h):
 
 def cv_to_surface(frame_bgr):
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-    arr = np.transpose(frame_rgb, (1, 0, 2))  # (w,h,3)
+    arr = np.transpose(frame_rgb, (1, 0, 2))  # (w, h, 3)
     return pygame.surfarray.make_surface(arr)
 
 
@@ -182,7 +188,7 @@ class Gesture:
     NONE = "NONE"
     FIST = "FIST"
     OPEN = "OPEN"
-    ONE  = "ONE"
+    ONE = "ONE"
     SWING = "SWING"
 
 
@@ -200,16 +206,16 @@ class GestureRecognizer:
         self.last_mp_time = 0.0
         self.last_result = None
 
-        # debounce
+        # Debounce state
         self.candidate = Gesture.NONE
         self.candidate_start = time.time()
         self.stable = Gesture.NONE
 
-        # swing buffer
-        self.swing_points = []  # [(t, x_px)]
+        # Swing buffer: list of (timestamp, x_position_px)
+        self.swing_points = []
         self.last_swing_time = 0.0
 
-        # hand motion for shuffle follow
+        # Hand movement data for deck-follow effect during shuffle
         self.prev_wrist = None
         self.hand_dxdy = (0.0, 0.0)
 
@@ -239,8 +245,11 @@ class GestureRecognizer:
 
     def detect(self, frame_bgr):
         """
-        输入 frame_bgr 必须是：已经 resize 到 CAM_WxCAM_H 且 flip(1) 后的画面，
-        这样骨架才能和右上角小窗对齐。
+        The input frame_bgr must already be:
+        - resized to CAM_W x CAM_H
+        - horizontally flipped with cv2.flip(frame, 1)
+
+        This keeps the landmark overlay aligned with the camera preview panel.
         """
         now = time.time()
         gesture_event = Gesture.NONE
@@ -268,16 +277,28 @@ class GestureRecognizer:
 
             wrist = pts_px[0]
             if self.prev_wrist is not None:
-                self.hand_dxdy = (wrist[0] - self.prev_wrist[0], wrist[1] - self.prev_wrist[1])
+                self.hand_dxdy = (
+                    wrist[0] - self.prev_wrist[0],
+                    wrist[1] - self.prev_wrist[1],
+                )
             self.prev_wrist = wrist
 
-            # ---------------- SWING (更灵敏、更符合“来回晃一下”) ----------------
+            # Swing detection:
+            # the gesture is considered a swing if the fingertip x-range
+            # inside the time window exceeds the threshold
             if raw == Gesture.ONE:
                 idx_tip = pts_px[8]
                 self.swing_points.append((now, idx_tip[0]))
-                self.swing_points = [(t, x) for (t, x) in self.swing_points if now - t <= SWING_WINDOW_SEC]
+                self.swing_points = [
+                    (t, x)
+                    for (t, x) in self.swing_points
+                    if now - t <= SWING_WINDOW_SEC
+                ]
 
-                if (now - self.last_swing_time) >= SWING_COOLDOWN_SEC and len(self.swing_points) >= 3:
+                enough_time_passed = (now - self.last_swing_time) >= SWING_COOLDOWN_SEC
+                enough_points = len(self.swing_points) >= 3
+
+                if enough_time_passed and enough_points:
                     xs = [x for (_, x) in self.swing_points]
                     if (max(xs) - min(xs)) >= SWING_THRESHOLD_PX:
                         gesture_event = Gesture.SWING
@@ -285,14 +306,14 @@ class GestureRecognizer:
                         self.swing_points.clear()
             else:
                 self.swing_points.clear()
-            # ------------------------------------------------------------------
 
         else:
             self.prev_wrist = None
             self.hand_dxdy = (0.0, 0.0)
             self.swing_points.clear()
 
-        # debounce（对 FIST/OPEN/ONE 稳定触发；SWING 直接返回）
+        # Debounce for FIST / OPEN / ONE.
+        # SWING is returned immediately.
         if gesture_event == Gesture.SWING:
             return gesture_event, pts_px
 
@@ -327,7 +348,7 @@ class Card:
         self.target = (CENTER[0], CENTER[1])
 
         self.mode = "SMALL"  # SMALL / STACK / BIG
-        self.face = "BACK"   # BACK / FRONT
+        self.face = "BACK"  # BACK / FRONT
 
         self.flipping = False
         self.flip_t = 0.0
@@ -427,7 +448,12 @@ class Deck:
                     positions.append((x, y))
                     break
             else:
-                positions.append((random.randint(margin, WIN_W - margin), random.randint(margin, WIN_H - margin)))
+                positions.append(
+                    (
+                        random.randint(margin, WIN_W - margin),
+                        random.randint(margin, WIN_H - margin),
+                    )
+                )
         return positions
 
     def reshuffle_order(self):
@@ -466,7 +492,6 @@ class Deck:
 
     def pick_card_to_center(self):
         self.active = self.draw_next_unique()
-
         self.active.force_back()
         self.active.set_layout((CENTER[0], CENTER[1]), "BIG")
 
@@ -521,24 +546,26 @@ class TarotApp:
         pygame.init()
         info = pygame.display.Info()
         print("Display:", info.current_w, info.current_h)
+
         pygame.display.set_caption("Feminist Tarot Gesture Prototype")
         self.screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.FULLSCREEN)
         self.canvas = pygame.Surface((WIN_W, WIN_H))
-        self.display_size = self.screen.get_size()  # 真实屏幕尺寸（可能不是1920x1080）
+        self.display_size = self.screen.get_size()  # actual screen size
 
-        tablecloth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tablecloth.jpg")
+        tablecloth_path = os.path.join(BASE_DIR, "tablecloth.jpg")
         self.tablecloth = None
         if os.path.exists(tablecloth_path):
             self.tablecloth = pygame.image.load(tablecloth_path).convert()
             self.tablecloth = pygame.transform.smoothscale(self.tablecloth, (WIN_W, WIN_H))
+
         self.clock = pygame.time.Clock()
 
-        # fonts
+        # Fonts
         self.font_en = self._load_en_font(72)
         self.font_cn = self._load_cn_font(56)
         self.small_ui = pygame.font.SysFont("Arial", 16)
 
-        # camera
+        # Camera
         self.cap = cv2.VideoCapture(CAM_INDEX)
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_W)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_H)
@@ -549,8 +576,7 @@ class TarotApp:
 
         self.state = State.STACK
         self.state_time = time.time()
-
-        self.current_text = None  # (en, cn)
+        self.current_text = None  # (english, chinese)
 
         self.deck.reset_stack()
 
@@ -564,24 +590,30 @@ class TarotApp:
         return pygame.font.SysFont("Times New Roman", size)
 
     def _load_cn_font(self, size):
-        # 1) 直接加载 macOS 系统字体文件：最稳，不会方框
-        for p in MAC_CN_FONT_CANDIDATES:
-            if os.path.exists(p):
+        # First choice: direct macOS system font file loading
+        for path in MAC_CN_FONT_CANDIDATES:
+            if os.path.exists(path):
                 try:
-                    return pygame.font.Font(p, size)
+                    return pygame.font.Font(path, size)
                 except Exception:
                     pass
 
-        # 2) SysFont 兜底（不同机器名字可能不一样）
-        for name in ["PingFang SC", "Hiragino Sans GB", "Heiti SC", "STHeiti", "Arial Unicode MS"]:
+        # Fallback: try common font family names
+        for name in [
+            "PingFang SC",
+            "Hiragino Sans GB",
+            "Heiti SC",
+            "STHeiti",
+            "Arial Unicode MS",
+        ]:
             try:
-                f = pygame.font.SysFont(name, size)
-                if f:
-                    return f
+                font = pygame.font.SysFont(name, size)
+                if font:
+                    return font
             except Exception:
                 continue
 
-        # 3) 最后兜底
+        # Final fallback
         return pygame.font.SysFont("Arial", size)
 
     def _load_deck(self):
@@ -594,7 +626,7 @@ class TarotApp:
         for fn in os.listdir(CARDS_DIR):
             if not fn.lower().endswith(".png"):
                 continue
-            if fn.lower() == "back.png" or fn.lower() == "back.png.png":
+            if fn.lower() in ("back.png", "back.png.png"):
                 back_path = os.path.join(CARDS_DIR, fn)
             else:
                 fronts.append(os.path.join(CARDS_DIR, fn))
@@ -607,19 +639,20 @@ class TarotApp:
         back_big = load_png_scaled(back_path, CARD_H_BIG)
 
         idx_to_path = {}
-        for p in fronts:
-            base = os.path.basename(p)
-            m = re.match(r"^(\d+)", base)
-            if m:
-                idx = int(m.group(1))
+        for path in fronts:
+            base = os.path.basename(path)
+            match = re.match(r"^(\d+)", base)
+            if match:
+                idx = int(match.group(1))
                 if 0 <= idx <= 21:
-                    idx_to_path[idx] = p
+                    idx_to_path[idx] = path
 
         missing = [i for i in range(22) if i not in idx_to_path]
         if missing:
-            print("WARNING: Some indices missing in ./cards. Expected files starting with 0..21.")
+            print("WARNING: Some indices are missing in ./cards.")
+            print("Expected front images named with 0..21 prefixes.")
             print("Missing indices:", missing)
-            print("Tip: rename like '0愚人.png' ... '21世界.png'")
+            print("Tip: rename files like '0愚人.png' ... '21世界.png'")
 
         cards = []
         for idx, name in enumerate(ARCANA):
@@ -627,13 +660,14 @@ class TarotApp:
                 front_big = load_png_scaled(idx_to_path[idx], CARD_H_BIG)
             else:
                 front_big = back_big.copy()
+
             cards.append(Card(name, idx, front_big, back_big, back_small, back_stack))
 
         print(f"Loaded deck: {len(cards)} cards. (front images found: {len(idx_to_path)}/22)")
         return Deck(cards)
 
-    def set_state(self, s):
-        self.state = s
+    def set_state(self, state):
+        self.state = state
         self.state_time = time.time()
 
     def reset_stack(self):
@@ -669,13 +703,11 @@ class TarotApp:
 
     def update_logic(self):
         if self.state == State.FLIPPING:
-            c = self.deck.active
-            if c and (not c.flipping) and c.face == "FRONT":
-                self.current_text = TAROT_TEXT.get(c.name, None)
+            active_card = self.deck.active
+            if active_card and (not active_card.flipping) and active_card.face == "FRONT":
+                self.current_text = TAROT_TEXT.get(active_card.name, None)
                 self.set_state(State.SHOW_FRONT)
 
-    # ---------------------------- ONLY CHANGED PARTS START ----------------------------
-    # 1) draw_ui() -> draw_ui_on(self, surf) and draw to surf instead of self.screen
     def draw_ui_on(self, surf):
         lines = [
             "Gestures:",
@@ -686,13 +718,14 @@ class TarotApp:
             "ESC / Q = quit",
             "Debug keys: R reset / S shuffle / P pick / F flip",
         ]
+
         x, y = 24, 20
-        for s in lines:
-            txt = self.small_ui.render(s, True, (230, 230, 230))
+        for line in lines:
+            txt = self.small_ui.render(line, True, (230, 230, 230))
             surf.blit(txt, (x, y))
             y += 18
 
-        # bottom text (only after SHOW_FRONT) —— 修复：固定两行不重叠
+        # Bottom bilingual text appears only after the card is fully revealed
         if self.current_text and self.state == State.SHOW_FRONT:
             en, cn = self.current_text
             en_s = self.font_en.render(en, True, (245, 245, 245))
@@ -705,10 +738,10 @@ class TarotApp:
             surf.blit(en_s, (bx - en_s.get_width() // 2, en_y))
             surf.blit(cn_s, (bx - cn_s.get_width() // 2, cn_y))
 
-    # 2) draw_camera() -> draw_camera_on(self, surf, frame_bgr, pts_px) and draw to surf
     def draw_camera_on(self, surf, frame_bgr, pts_px):
         panel_x = WIN_W - CAM_W - 40
         panel_y = 40
+
         pygame.draw.rect(
             surf,
             (20, 20, 30),
@@ -726,8 +759,10 @@ class TarotApp:
 
         if pts_px:
             conns = mp.solutions.hands.HAND_CONNECTIONS
-            for (x, y) in pts_px:
+
+            for x, y in pts_px:
                 pygame.draw.circle(surf, (60, 200, 255), (panel_x + x, panel_y + y), 3)
+
             for a, b in conns:
                 ax, ay = pts_px[a]
                 bx, by = pts_px[b]
@@ -738,7 +773,6 @@ class TarotApp:
                     (panel_x + bx, panel_y + by),
                     1,
                 )
-    # ---------------------------- ONLY CHANGED PARTS END ----------------------------
 
     def run(self):
         running = True
@@ -748,43 +782,52 @@ class TarotApp:
             dt = time.time() - last_time
             last_time = time.time()
 
-            for e in pygame.event.get():
-                if e.type == pygame.QUIT:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
                     running = False
-                if e.type == pygame.KEYDOWN:
-                    if e.key in (pygame.K_ESCAPE, pygame.K_q):
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_ESCAPE, pygame.K_q):
                         running = False
-                    if e.key == pygame.K_r:
+                    if event.key == pygame.K_r:
                         self.reset_stack()
-                    if e.key == pygame.K_s:
+                    if event.key == pygame.K_s:
                         self.start_shuffle()
-                    if e.key == pygame.K_p:
+                    if event.key == pygame.K_p:
                         self.pick()
-                    if e.key == pygame.K_f:
+                    if event.key == pygame.K_f:
                         self.flip()
 
             frame = None
             pts = None
 
             if self.camera_ok:
-                ok, f = self.cap.read()
-                if ok and f is not None:
-                    f = cv2.resize(f, (CAM_W, CAM_H), interpolation=cv2.INTER_AREA)
-                    f = cv2.flip(f, 1)
-                    frame = f
+                ok, frame_read = self.cap.read()
+                if ok and frame_read is not None:
+                    frame_read = cv2.resize(
+                        frame_read,
+                        (CAM_W, CAM_H),
+                        interpolation=cv2.INTER_AREA,
+                    )
+                    frame_read = cv2.flip(frame_read, 1)
+                    frame = frame_read
 
-                    g_event, pts = self.gesture.detect(frame)
+                    gesture_event, pts = self.gesture.detect(frame)
 
-                    if g_event == Gesture.FIST:
+                    if gesture_event == Gesture.FIST:
                         self.reset_stack()
-                    elif g_event == Gesture.OPEN:
-                        if self.state in (State.SHOW_FRONT, State.PICKED_BACK, State.FLIPPING):
+                    elif gesture_event == Gesture.OPEN:
+                        if self.state in (
+                            State.SHOW_FRONT,
+                            State.PICKED_BACK,
+                            State.FLIPPING,
+                        ):
                             self.reshuffle_from_show()
                         else:
                             self.start_shuffle()
-                    elif g_event == Gesture.ONE:
+                    elif gesture_event == Gesture.ONE:
                         self.pick()
-                    elif g_event == Gesture.SWING:
+                    elif gesture_event == Gesture.SWING:
                         self.flip()
 
                     if self.state == State.SHUFFLING:
@@ -793,7 +836,7 @@ class TarotApp:
             self.deck.update(dt)
             self.update_logic()
 
-            # 1) 先画到 canvas
+            # Draw everything to the internal canvas first
             if self.tablecloth:
                 self.canvas.blit(self.tablecloth, (0, 0))
             else:
@@ -803,7 +846,7 @@ class TarotApp:
             self.draw_ui_on(self.canvas)
             self.draw_camera_on(self.canvas, frame, pts)
 
-            # 2) 再把 canvas 缩放到真实屏幕并输出
+            # Scale the canvas to the actual display size
             scaled = pygame.transform.smoothscale(self.canvas, self.display_size)
             self.screen.blit(scaled, (0, 0))
             pygame.display.flip()
@@ -813,6 +856,7 @@ class TarotApp:
             self.cap.release()
         except Exception:
             pass
+
         pygame.quit()
 
 
