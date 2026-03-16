@@ -1,6 +1,6 @@
 # Title: Feminist Tarot Gesture Prototype
 # Author: Siyu Xu
-# Date: 12 January 2026
+# Date: 22 January 2026
 #
 # Description:
 # A webcam-based interactive tarot prototype controlled by hand gestures.
@@ -47,7 +47,7 @@ import mediapipe as mp
 
 
 # ---------------------------- CONFIG ----------------------------
-WIN_W, WIN_H = 1280, 720
+WIN_W, WIN_H = 1920, 1080
 FPS = 30  # 你机器卡的话 30 比 60 稳很多
 
 CAM_W, CAM_H = 320, 240
@@ -124,28 +124,28 @@ ARCANA = [
 
 # 你给的牌意（英文 keyword + 中文映射）
 TAROT_TEXT = {
-    "The Empress": ("authority", "权力"),
-    "The Hierophant": ("ethics", "伦理"),
+    "The Fool": ("birth", "降生"),
+    "The Magician": ("agency", "能动性"),
+    "The High Priestess": ("intuition", "直觉"),
+    "The Empress": ("motherhood", "母职"),
+    "The Emperor": ("patriarchy", "父q"),
+    "The Hierophant": ("norms", "规训"),
+    "The Lovers": ("sexual relationship", "x缘关系"),
+    "The Chariot": ("escape", "出走"),
     "Strength": ("feminism", "女q主义"),
-    "Death": ("abortion", "y流"),
+    "The Hermit": ("solitude", "独居"),
+    "Wheel of Fortune": ("marriage", "婚姻"),
+    "Justice": ("equality", "平等"),
+    "The Hanged Man": ("gaslighting", "煤q灯"),
+    "Death": ("abortion", "d胎"),
     "Temperance": ("contraception", "避y"),
     "The Devil": ("libido", "x欲"),
-    "Wheel of Fortune": ("marriage", "婚姻"),
     "The Tower": ("domestic violence", "家b"),
     "The Star": ("bestie", "天才女友"),
-    "Judgement": ("divorce", "离h"),
-    "The World": ("migration", "迁徙"),
-    "The Fool": ("birth", "出生"),
-    "The Magician": ("agency", "发声 / 能动性"),
-    "The High Priestess": ("silence", "沉默"),
-    "The Emperor": ("patriarchy", "父q"),
-    "The Lovers": ("consent", "同y"),
-    "The Chariot": ("escape", "出走"),
-    "Justice": ("fairness", "公正"),
-    "The Hermit": ("loneliness", "孤独"),
-    "The Hanged Man": ("gaslighting", "煤q灯"),
-    "The Moon": ("anxiety", "焦虑"),
+    "The Moon": ("self-devouring", "自我吞噬"),
     "The Sun": ("freedom", "自由"),
+    "Judgement": ("divorce", "离h冷静期"),
+    "The World": ("migration", "迁徙"),
 }
 
 
@@ -519,8 +519,18 @@ class State:
 class TarotApp:
     def __init__(self):
         pygame.init()
+        info = pygame.display.Info()
+        print("Display:", info.current_w, info.current_h)
         pygame.display.set_caption("Feminist Tarot Gesture Prototype")
-        self.screen = pygame.display.set_mode((WIN_W, WIN_H))
+        self.screen = pygame.display.set_mode((WIN_W, WIN_H), pygame.FULLSCREEN)
+        self.canvas = pygame.Surface((WIN_W, WIN_H))
+        self.display_size = self.screen.get_size()  # 真实屏幕尺寸（可能不是1920x1080）
+
+        tablecloth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tablecloth.jpg")
+        self.tablecloth = None
+        if os.path.exists(tablecloth_path):
+            self.tablecloth = pygame.image.load(tablecloth_path).convert()
+            self.tablecloth = pygame.transform.smoothscale(self.tablecloth, (WIN_W, WIN_H))
         self.clock = pygame.time.Clock()
 
         # fonts
@@ -535,7 +545,6 @@ class TarotApp:
         self.camera_ok = self.cap.isOpened()
 
         self.gesture = GestureRecognizer()
-
         self.deck = self._load_deck()
 
         self.state = State.STACK
@@ -665,7 +674,9 @@ class TarotApp:
                 self.current_text = TAROT_TEXT.get(c.name, None)
                 self.set_state(State.SHOW_FRONT)
 
-    def draw_ui(self):
+    # ---------------------------- ONLY CHANGED PARTS START ----------------------------
+    # 1) draw_ui() -> draw_ui_on(self, surf) and draw to surf instead of self.screen
+    def draw_ui_on(self, surf):
         lines = [
             "Gestures:",
             "Fist = reset stack",
@@ -677,8 +688,8 @@ class TarotApp:
         ]
         x, y = 24, 20
         for s in lines:
-            surf = self.small_ui.render(s, True, (230, 230, 230))
-            self.screen.blit(surf, (x, y))
+            txt = self.small_ui.render(s, True, (230, 230, 230))
+            surf.blit(txt, (x, y))
             y += 18
 
         # bottom text (only after SHOW_FRONT) —— 修复：固定两行不重叠
@@ -691,14 +702,15 @@ class TarotApp:
             en_y = WIN_H - 150
             cn_y = WIN_H - 80
 
-            self.screen.blit(en_s, (bx - en_s.get_width() // 2, en_y))
-            self.screen.blit(cn_s, (bx - cn_s.get_width() // 2, cn_y))
+            surf.blit(en_s, (bx - en_s.get_width() // 2, en_y))
+            surf.blit(cn_s, (bx - cn_s.get_width() // 2, cn_y))
 
-    def draw_camera(self, frame_bgr, pts_px):
+    # 2) draw_camera() -> draw_camera_on(self, surf, frame_bgr, pts_px) and draw to surf
+    def draw_camera_on(self, surf, frame_bgr, pts_px):
         panel_x = WIN_W - CAM_W - 40
         panel_y = 40
         pygame.draw.rect(
-            self.screen,
+            surf,
             (20, 20, 30),
             (panel_x - 6, panel_y - 6, CAM_W + 12, CAM_H + 12),
             border_radius=6,
@@ -706,26 +718,27 @@ class TarotApp:
 
         if frame_bgr is None:
             msg = self.small_ui.render("Camera not available", True, (240, 180, 180))
-            self.screen.blit(msg, (panel_x + 20, panel_y + CAM_H // 2))
+            surf.blit(msg, (panel_x + 20, panel_y + CAM_H // 2))
             return
 
         cam_surf = cv_to_surface(frame_bgr)
-        self.screen.blit(cam_surf, (panel_x, panel_y))
+        surf.blit(cam_surf, (panel_x, panel_y))
 
         if pts_px:
             conns = mp.solutions.hands.HAND_CONNECTIONS
             for (x, y) in pts_px:
-                pygame.draw.circle(self.screen, (60, 200, 255), (panel_x + x, panel_y + y), 3)
+                pygame.draw.circle(surf, (60, 200, 255), (panel_x + x, panel_y + y), 3)
             for a, b in conns:
                 ax, ay = pts_px[a]
                 bx, by = pts_px[b]
                 pygame.draw.line(
-                    self.screen,
+                    surf,
                     (220, 220, 220),
                     (panel_x + ax, panel_y + ay),
                     (panel_x + bx, panel_y + by),
                     1,
                 )
+    # ---------------------------- ONLY CHANGED PARTS END ----------------------------
 
     def run(self):
         running = True
@@ -780,11 +793,19 @@ class TarotApp:
             self.deck.update(dt)
             self.update_logic()
 
-            self.screen.fill(BG_COLOR)
-            self.deck.draw(self.screen)
-            self.draw_ui()
-            self.draw_camera(frame, pts)
+            # 1) 先画到 canvas
+            if self.tablecloth:
+                self.canvas.blit(self.tablecloth, (0, 0))
+            else:
+                self.canvas.fill(BG_COLOR)
 
+            self.deck.draw(self.canvas)
+            self.draw_ui_on(self.canvas)
+            self.draw_camera_on(self.canvas, frame, pts)
+
+            # 2) 再把 canvas 缩放到真实屏幕并输出
+            scaled = pygame.transform.smoothscale(self.canvas, self.display_size)
+            self.screen.blit(scaled, (0, 0))
             pygame.display.flip()
             self.clock.tick(FPS)
 
