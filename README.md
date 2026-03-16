@@ -1,6 +1,7 @@
 # WCC2 – Creative Coding 2 (2025–26)
 
-Goldsmiths – MA Computational Arts  
+Goldsmiths, University of London  
+MA Computational Arts  
 APBR – Workshops in Creative Coding 2
 
 ---
@@ -8,83 +9,177 @@ APBR – Workshops in Creative Coding 2
 # Feminist Tarot Gesture Prototype
 
 **Author:** Siyu Xu  
-**Date:** 12 Jan 2026  
-**Tech:** Python (Pygame + OpenCV + MediaPipe)  
+**Date:** 22 Jan 2026  
+**Tech:** Python, Pygame, OpenCV, MediaPipe  
 **Input:** Webcam hand gestures  
-**Output:** Tarot interaction + hand skeleton overlay + bilingual keywords
+**Output:** Tarot interaction, hand skeleton overlay, bilingual keywords
 
 A webcam-based interactive tarot prototype controlled by hand gestures.  
-The user shuffles a 22-card Major Arcana deck, picks a card, and flips it using real-time hand tracking. After a successful flip, the system displays an English keyword and a Chinese translation for the revealed card.
+The user shuffles a 22-card Major Arcana deck, picks a card, and flips it using real-time hand landmark tracking.  
+After a successful flip, the system displays a poetic English keyword and a Chinese translation for the revealed card.
 
 ---
 
-## Files you need (important)
+## Project structure
+
+The main project folder is:
+
+```bash
+Coding_Feminist Tarot Gesture Prototype/
+````
+
+Inside it, the key files are:
+
+```bash
+Coding_Feminist Tarot Gesture Prototype/
+├── tarot_gesture.py
+├── 01.face_landmarks.py
+├── 02.hand_landmarks.py
+├── 03.pose_landmarks.py
+├── cards/
+├── fonts/
+├── face_landmarker.task
+├── hand_landmarker.task
+├── pose_landmarker.task
+├── imgui.ini
+└── tablecloth.jpg
+```
+
+---
+
+## Files required to run
 
 Make sure these files exist next to `tarot_gesture.py`:
 
-- `cards/`
-  - `back.png`
-  - 22 front PNGs named with **0..21** prefix (e.g. `0愚人.png ... 21世界.png`)
-- `fonts/`
-  - `NotoSerif-VariableFont_wdth,wght.ttf`
+### `cards/`
 
-Main file to run:
-- `tarot_gesture.py`
+This folder must contain:
+
+* `back.png`
+* 22 front PNGs named with **0..21** prefixes
+  for example:
+
+```bash
+0愚人.png
+1魔术师.png
+2女祭司.png
+...
+21世界.png
+```
+
+### `fonts/`
+
+This folder must contain:
+
+* `NotoSerif-VariableFont_wdth,wght.ttf`
+
+### Other files
+
+These files should also remain in the same folder as the main script:
+
+* `hand_landmarker.task`
+* `face_landmarker.task`
+* `pose_landmarker.task`
 
 ---
 
 ## How to run
 
-Open Terminal and run:
+Open Terminal from the **repository root** and run:
 
 ```bash
 cd "Coding_Feminist Tarot Gesture Prototype"
-pip3 install opencv-python numpy pygame mediapipe
-python3 tarot_gesture.py
-Quit:
+python3 -m venv ../.venv
+source ../.venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install pygame opencv-python mediapipe numpy
+python tarot_gesture.py
+```
 
-Press ESC or Q
+If the virtual environment already exists, you only need:
 
-Gestures
+```bash
+cd "Coding_Feminist Tarot Gesture Prototype"
+source ../.venv/bin/activate
+python tarot_gesture.py
+```
 
-Fist → reset stack
+---
 
-Open palm → shuffle / return to shuffle
+## Controls
 
-One finger (index only) → pick (only when shuffling)
+### Hand gestures
 
-Swing index finger left/right → flip (only after pick)
+* **Fist** → reset stack
+* **Open palm** → shuffle / return to shuffle
+* **One finger (index only)** → pick a card (only when shuffling)
+* **Swing index finger left/right** → flip the selected card (only after pick)
 
-Keyboard debug (if camera is unavailable):
+### Keyboard controls
 
-R reset, S shuffle, P pick, F flip
+If the camera is unavailable, you can use:
 
-Notes
+* **R** → reset
+* **S** → shuffle
+* **P** → pick
+* **F** → flip
+* **ESC** or **Q** → quit
 
-Chinese text on macOS: the code loads system fonts (PingFang etc.) automatically.
-On Windows, if Chinese shows as squares, you may need to change the font loading part in the code.
+---
 
-Screenshots (add 2–4 images)
+## Visual output
 
-Shuffle state:
+The work includes:
 
-Picked card:
+* a full-screen tarot interface
+* a webcam preview window
+* a visible hand landmark / skeleton overlay
+* bilingual text output after a successful card flip
 
-Flipped card + keywords:
+---
 
-(Optional) Setup photo:
+## Notes
 
-Acknowledgements (AI tools)
+* This version was tested on **macOS**.
+* For Chinese text display on macOS, the code tries to load built-in system fonts such as **PingFang** automatically.
+* If Chinese text appears as squares on another operating system, you may need to edit the Chinese font-loading section in the code.
+* The project uses a webcam, so camera permission may be required.
 
-I acknowledge the use of ChatGPT (https://chat.openai.com/
-) to generate, debug, and refine parts of the Python code (webcam capture, MediaPipe hand tracking, gesture logic, and Pygame rendering). The generated code was then edited, extended, parameter-tuned and commented by me.
+---
 
-References
+## Example workflow
 
-MediaPipe: https://developers.google.com/mediapipe
+1. Start in the central card stack state.
+2. Show an **open palm** to shuffle the deck.
+3. Show **one finger** to pick a card.
+4. Swing the index finger **left/right** to flip the card.
+5. Read the English keyword and Chinese translation shown on screen.
 
-Pygame: https://www.pygame.org/
+---
 
-OpenCV: https://opencv.org/
+## Screenshots
 
-Rider–Waite tarot (Pamela Colman Smith) for the Major Arcana imagery
+Please add screenshots here if needed for submission, for example:
+
+* shuffle state
+* picked card state
+* flipped card with text
+* installation / setup photo
+
+---
+
+## Acknowledgements
+
+I acknowledge the use of ChatGPT to generate, debug, and refine parts of the Python code, including webcam capture, MediaPipe hand tracking, gesture logic, and Pygame rendering.
+
+The generated code was then edited, extended, parameter-tuned, and commented by me, and portions of this AI-assisted code are included in the final work.
+
+---
+
+## References
+
+* Python `venv` documentation: [https://docs.python.org/3/library/venv.html](https://docs.python.org/3/library/venv.html)
+* MediaPipe documentation: [https://ai.google.dev/edge/mediapipe/solutions/guide](https://ai.google.dev/edge/mediapipe/solutions/guide)
+* Pygame documentation: [https://www.pygame.org/docs/](https://www.pygame.org/docs/)
+* OpenCV website: [https://opencv.org/](https://opencv.org/)
+* Rider–Waite tarot / Pamela Colman Smith Major Arcana imagery
