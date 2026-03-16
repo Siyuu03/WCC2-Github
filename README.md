@@ -35,7 +35,7 @@ Coding_Feminist Tarot Gesture Prototype/
 
 Inside it, the key files are:
 
-```bash
+```bash id="fjlwm3"
 Coding_Feminist Tarot Gesture Prototype/
 ├── tarot_gesture.py
 ├── 01.face_landmarks.py
@@ -64,7 +64,7 @@ This folder must contain:
 * 22 front PNGs named with **0..21** prefixes
   for example:
 
-```bash
+```bash id="f7253a"
 0愚人.png
 1魔术师.png
 2女祭司.png
@@ -92,7 +92,7 @@ These files should also remain in the same folder as the main script:
 
 Open Terminal from the **repository root** and run:
 
-```bash
+```bash id="zv0dob"
 cd "Coding_Feminist Tarot Gesture Prototype"
 python3 -m venv ../.venv
 source ../.venv/bin/activate
@@ -103,7 +103,7 @@ python tarot_gesture.py
 
 If the virtual environment already exists, you only need:
 
-```bash
+```bash id="4xvug6"
 cd "Coding_Feminist Tarot Gesture Prototype"
 source ../.venv/bin/activate
 python tarot_gesture.py
@@ -166,14 +166,21 @@ The work includes:
 
 ---
 
-## Screenshots
+## Documentation photos
 
-Please add screenshots here if needed for submission, for example:
+These images document the project running.
 
-* shuffle state
-* picked card state
-* flipped card with text
-* installation / setup photo
+### Run 1
+
+![Run 1](images/run1.jpg)
+
+### Run 2
+
+![Run 2](images/run2.jpg)
+
+### Run 3
+
+![Run 3](images/run3.jpg)
 
 ---
 
